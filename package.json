@@ -1,0 +1,26 @@
+{
+  "name": "dvizh-wroclaw-server",
+  "version": "1.0.0",
+  "description": "Backend server for Dvizh Wroclaw",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.80.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "formidable": "^3.5.4",
+    "install": "^0.13.0",
+    "multer": "^2.0.2",
+    "npm": "^11.6.2",
+    "pdfkit": "^0.17.2",
+    "stripe": "^19.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
