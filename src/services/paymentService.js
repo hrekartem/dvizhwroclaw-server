@@ -50,6 +50,8 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
         },
     });
 
+    const EXPIRE_AFTER_MINUTES = 1;
+
     if (session.url) {
         for (const seat of seatsToCharge) {
             for (let i = 0; i < seat.quantity; i++) {
@@ -58,6 +60,16 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
             console.log(`Зарезервировано ${seat.quantity} мест для ${seat.seatId}`);
         }
     }
+
+    setTimeout(async () => {
+        try {
+            await stripe.checkout.sessions.expire(session.id);
+            console.log(`Сессия ${session.id} истекла через ${EXPIRE_AFTER_MINUTES} минут`);
+        } catch (err) {
+            console.error(`Ошибка при истечении сессии ${session.id}:`, err.message);
+        }
+    }, EXPIRE_AFTER_MINUTES * 60 * 1000);
+
     return session.url;
 }
 

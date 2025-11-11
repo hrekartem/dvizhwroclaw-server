@@ -120,7 +120,7 @@ async function handleWebhook(req, res) {
       break;
     }
     default:
-
+      console.log(event.type);
   }
 
   // Stripe требует 2xx-ответ, чтобы не повторять webhook
