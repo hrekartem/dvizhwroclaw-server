@@ -30,7 +30,13 @@ app.use(
   })
 );
 
-app.use(cookieParser()); // 👈 чтобы работать с cookie на сервере
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/payment/webhook") {
+    return next();
+  }
+  express.json()(req, res, next);
+});
+app.use(cookieParser());
 
 // 🔹 Роуты
 app.use("/api/auth", authRoutes);

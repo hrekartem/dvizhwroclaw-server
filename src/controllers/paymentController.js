@@ -25,9 +25,8 @@ async function handleWebhook(req, res) {
   console.log("Raw body type:", typeof req.body); // должно быть object? ❌
   console.log("Is Buffer?", Buffer.isBuffer(req.body)); // должно быть true
   console.log("Stripe signature header:", req.headers['stripe-signature']);
-  console.log("Endpoint secret:", endpointSecret);
-  
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  console.log("Endpoint secret:", endpointSecret);
   const sig = req.headers["stripe-signature"];
   let event;
 
