@@ -1,6 +1,7 @@
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { getEventSeats, getEventById } = require('./eventsService');
+const { reserveTicket } = require('./ticketService');
 
 const FEE = 1.02;
 
@@ -15,6 +16,12 @@ async function createPayment({ eventId, seats: selectedSeats }) {
         if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
         if (!event) throw new Error('Event не найден.');
         if (seat.quantity > seatData.available) throw new Error(`Недостаточно мест для ${seat.seatId}`);
+
+        await reserveTicket({
+            eventId,
+            seatId: seat.seatId,
+            userId,
+        });
 
         line_items.push({
             price_data: {

@@ -13,6 +13,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "http://192.168.1.6:3000",
+  "https://dvizhwroclaw.eu:3000",
+  "https://dvizhwroclaw.eu",
 ];
 
 app.use(
