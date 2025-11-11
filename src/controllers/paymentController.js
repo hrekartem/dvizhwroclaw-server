@@ -1,6 +1,6 @@
 const { createPayment } = require("../services/paymentService");
 const { createTicket, returnTicketToPool } = require("../services/ticketService");
-const { getEventById, getEventSeats} = require("../services/eventsService")
+const { getEventById, getEventSeats } = require("../services/eventsService")
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -22,9 +22,15 @@ async function fetchCreatePayment(req, res) {
 }
 
 async function handleWebhook(req, res) {
+  console.log("Raw body type:", typeof req.body); // должно быть object? ❌
+  console.log("Is Buffer?", Buffer.isBuffer(req.body)); // должно быть true
+  console.log("Stripe signature header:", req.headers['stripe-signature']);
+  console.log("Endpoint secret:", endpointSecret);
+  
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const sig = req.headers["stripe-signature"];
   let event;
+
 
   try {
     // Stripe требует "raw body", поэтому убедись, что bodyParser отключён для этого роута
