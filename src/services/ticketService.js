@@ -1,25 +1,30 @@
 const supabase = require("../config/supabase");
 
-async function reserveTicket({ eventId, seatId, userId }) {
-  // 1. Проверим, что место существует и доступно
+/**
+ * Резервирует место: увеличивает reserved на 1
+ */
+async function reserveTicket({ seatId }) {
+  // Получаем текущее состояние места
   const { data: seatData, error: seatError } = await supabase
     .from("event_seats")
-    .select("*")
+    .select("id, name, capacity, reserved")
     .eq("id", seatId)
     .single();
 
   if (seatError || !seatData) throw new Error(`Место не найдено (${seatId})`);
 
-  if (seatData.available <= 0) throw new Error(`Место ${seatData.name} недоступно`);
+  const available = seatData.capacity - (seatData.reserved || 0);
+  if (available <= 0) throw new Error(`Место ${seatData.name} недоступно`);
 
-  // 2. Уменьшаем количество доступных мест
+  // Увеличиваем reserved
   const { error: updateError } = await supabase
     .from("event_seats")
-    .update({ available: seatData.available - 1 })
+    .update({ reserved: (seatData.reserved || 0) + 1 })
     .eq("id", seatId);
 
-  if (updateError) throw new Error("Ошибка обновления количества мест");
+  if (updateError) throw new Error("Ошибка при резервировании места");
 
+  console.log(`✅ Место ${seatId} зарезервировано`);
   return true;
 }
 
@@ -44,6 +49,7 @@ async function createTicket({ event, user, seat = null }) {
 
     if (error) throw error;
 
+    console.log(`🎫 Билет создан для пользователя ${user.id}`);
     return data;
   } catch (err) {
     console.error("Ошибка при создании билета:", err.message);
@@ -52,28 +58,28 @@ async function createTicket({ event, user, seat = null }) {
 }
 
 /**
- * Возврат места в пул (если оплата не прошла или отменена)
+ * Возврат места в пул (если оплата не прошла)
  */
 async function returnTicketToPool({ seatId }) {
   try {
-    // 1. Получаем текущее состояние места
     const { data: seatData, error: seatError } = await supabase
       .from("event_seats")
-      .select("available")
+      .select("id, reserved")
       .eq("id", seatId)
       .single();
 
     if (seatError || !seatData) throw new Error(`Место ${seatId} не найдено`);
 
-    // 2. Увеличиваем количество доступных мест
+    const newReserved = Math.max((seatData.reserved || 1) - 1, 0);
+
     const { error: updateError } = await supabase
       .from("event_seats")
-      .update({ available: seatData.available + 1 })
+      .update({ reserved: newReserved })
       .eq("id", seatId);
 
     if (updateError) throw new Error("Ошибка при возврате места в пул");
 
-    console.log(`✅ Место ${seatId} возвращено в пул`);
+    console.log(`♻️ Место ${seatId} возвращено из резерва`);
     return true;
   } catch (err) {
     console.error("Ошибка returnTicketToPool:", err.message);

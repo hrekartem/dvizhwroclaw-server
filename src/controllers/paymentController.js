@@ -5,14 +5,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 async function fetchCreatePayment(req, res) {
   try {
-    const { eventId, seats } = req.body;
+    const { userId, eventId, seats } = req.body;
 
     if (!eventId || !seats || !Array.isArray(seats) || seats.length === 0) {
       return res.status(400).json({ error: "Неверные данные для оплаты" });
     }
 
     console.log(eventId, seats);
-    const url = await createPayment({ eventId, seats });
+    const url = await createPayment({ eventId, seats, userId });
     res.json({ url });
   } catch (err) {
     console.error(err);

@@ -315,15 +315,50 @@ async function getEventById(id) {
 }
 
 async function getAvailableSeats(eventId) {
-  const { data, error } = await supabase
-    .from('tickets')
-    .select('seat_id, status')
-    .eq('event_id', eventId)
-    .eq('status', 'active');
+  // 1. Берём все места для события
+  const { data: seats, error: seatsError } = await supabase
+    .from("event_seats")
+    .select("id, name, capacity, reserved")
+    .eq("event_id", eventId);
 
-  if (error) throw error;
-  return data;
+  if (seatsError) throw seatsError;
+
+  // 2. Берём все активные билеты для события
+  const { data: tickets, error: ticketsError } = await supabase
+    .from("tickets")
+    .select("seat_id")
+    .eq("event_id", eventId)
+    .eq("status", "active");
+
+  if (ticketsError) throw ticketsError;
+
+  // 3. Считаем, сколько билетов куплено по каждому месту
+  const activeCountMap = {};
+  tickets.forEach(ticket => {
+    const seatId = ticket.seat_id;
+    if (!seatId) return; // игнорируем билеты без места
+    activeCountMap[seatId] = (activeCountMap[seatId] || 0) + 1;
+  });
+
+  // 4. Вычисляем доступность
+  const availableSeats = seats.map(seat => {
+    const reserved = seat.reserved || 0;
+    const capacity = seat.capacity || 0;
+    const activeCount = activeCountMap[seat.id] || 0;
+
+    const available = Math.max(capacity - reserved - activeCount, 0);
+
+    return {
+      ...seat,
+      available,
+    };
+  });
+
+  return availableSeats;
 }
+
+module.exports = { getAvailableSeats };
+
 
 async function getEventSeats(eventId) {
   if (!eventId) throw new Error("Missing event ID");

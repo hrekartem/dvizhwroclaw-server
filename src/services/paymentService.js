@@ -5,37 +5,40 @@ const { reserveTicket } = require('./ticketService');
 
 const FEE = 1.02;
 
-async function createPayment({ eventId, seats: selectedSeats }) {
+async function createPayment({ eventId, seats: selectedSeats, userId }) {
     const { seats: allSeats } = await getEventSeats(eventId);
     const { event: event } = await getEventById(eventId);
 
     const line_items = [];
 
+    console.log(userId);
     for (const seat of selectedSeats) {
-        const seatData = allSeats.find(s => s.id === seat.seatId);
-        if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
-        if (!event) throw new Error('Event не найден.');
-        if (seat.quantity > seatData.available) throw new Error(`Недостаточно мест для ${seat.seatId}`);
-
-        await reserveTicket({
-            eventId,
-            seatId: seat.seatId,
-            userId,
-        });
-
-        line_items.push({
-            price_data: {
-                currency: "pln",
-                product_data: {
-                    name: `Ивент: ${event.name}`,
-                    images: [event.main_image_url],
-                    description: `Место: ${seatData.name}`,
+        try {
+            const seatData = allSeats.find(s => s.id === seat.seatId);
+            if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
+            if (!event) throw new Error('Event не найден.');
+            if (seat.quantity > seatData.available) throw new Error(`Недостаточно мест для ${seat.seatId}`);
+            for (let i = 0; i < seat.quantity; i++) {
+                await reserveTicket({ seatId: seat.seatId });
+            }
+            console.log(`Зарезервировано ${seat.quantity} мест для ${seat.seatId}`);
+            line_items.push({
+                price_data: {
+                    currency: "pln",
+                    product_data: {
+                        name: `Ивент: ${event.name}`,
+                        images: [event.main_image_url],
+                        description: `Место: ${seatData.name}, UserID: ${userId}`,
+                    },
+                    unit_amount: Math.round(Number(seatData.price_pln) * 100 * FEE),
                 },
-                unit_amount: Math.round(Number(seatData.price_pln) * 100 * FEE),
-            },
-            quantity: seat.quantity,
-        });
+                quantity: seat.quantity,
+            });
+        } catch (err) {
+            console.error("Ошибка при резервировании:", seat.seatId, err.message);
+        }
     }
+
 
     // После цикла создаём сессию один раз
     const session = await stripe.checkout.sessions.create({
