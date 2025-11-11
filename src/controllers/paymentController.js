@@ -3,6 +3,7 @@ const { createTicket, returnTicketToPool } = require("../services/ticketService"
 const { getEventById, getEventSeats } = require("../services/eventsService")
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const supabase = require("../config/supabase");
 
 async function fetchCreatePayment(req, res) {
   try {
@@ -12,7 +13,10 @@ async function fetchCreatePayment(req, res) {
       return res.status(400).json({ error: "Неверные данные для оплаты" });
     }
 
-    console.log(eventId, seats);
+    console.log("EventID: ", eventId);
+    console.log("seats: ", seats);
+    console.log("userId: ", userId);
+
     const url = await createPayment({ eventId, seats, userId });
     res.json({ url });
   } catch (err) {
@@ -22,18 +26,11 @@ async function fetchCreatePayment(req, res) {
 }
 
 async function handleWebhook(req, res) {
-  console.log("Raw body type:", typeof req.body); // должно быть object? ❌
-  console.log("Is Buffer?", Buffer.isBuffer(req.body)); // должно быть true
-  console.log("Stripe signature header:", req.headers['stripe-signature']);
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  console.log("Endpoint secret:", endpointSecret);
   const sig = req.headers["stripe-signature"];
   let event;
 
-
   try {
-    // Stripe требует "raw body", поэтому убедись, что bodyParser отключён для этого роута
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error("❌ Stripe webhook verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -45,32 +42,56 @@ async function handleWebhook(req, res) {
     case "checkout.session.completed": {
       const session = event.data.object;
       const { eventId, seats, userId } = session.metadata || {};
-
       try {
         const parsedSeats = seats ? JSON.parse(seats) : [];
-        if (!eventId || parsedSeats.length === 0) {
-          console.warn("⚠️ Нет eventId или seats в metadata");
+        if (!eventId || parsedSeats.length === 0 || !userId) {
+          console.warn("⚠️ Нет eventId или seats в metadata либо userID");
           break;
         }
 
         const { event } = await getEventById(eventId);
         if (!event) throw new Error("Ивент не найден");
 
-        // Создаём билеты по каждому месту
+        // Получаем все места один раз
+        const { seats: allSeats } = await getEventSeats(eventId);
+
+        // Идемпотентность и создание билетов
         for (const seat of parsedSeats) {
           const seatId = seat.seatId;
-          const { seats: allSeats } = await getEventSeats(eventId);
+          const quantity = Number(seat.quantity) || 0;
+          if (quantity <= 0) continue;
+
           const seatData = allSeats.find((s) => s.id === seatId);
           if (!seatData) {
             console.warn(`⚠️ Место ${seatId} не найдено`);
             continue;
           }
 
-          await createTicket({
-            event,
-            user: { id: userId }, // userId передавался в metadata при создании оплаты
-            seat: seatData,
-          });
+          // Считаем уже созданные активные билеты для пары (userId,eventId,seatId)
+          const { data: existingTickets, error: existingErr } = await supabase
+            .from("tickets")
+            .select("id")
+            .eq("event_id", eventId)
+            .eq("user_id", userId)
+            .eq("seat_id", seatId)
+            .eq("status", "active");
+
+          if (existingErr) {
+            console.error("Ошибка проверки существующих билетов:", existingErr.message);
+            continue;
+          }
+
+          const existingCount = Array.isArray(existingTickets) ? existingTickets.length : 0;
+          const remaining = Math.max(0, quantity - existingCount);
+          console.log(`seat=${seatId} quantity=${quantity} existing=${existingCount} remaining=${remaining}`);
+
+          for (let i = 0; i < remaining; i++) {
+            await createTicket({
+              event,
+              user: { id: userId },
+              seat: seatData,
+            });
+          }
         }
 
         console.log("✅ Билеты успешно созданы после оплаты");
@@ -98,9 +119,8 @@ async function handleWebhook(req, res) {
       }
       break;
     }
-
     default:
-      console.log(`Unhandled event type ${event.type}`);
+
   }
 
   // Stripe требует 2xx-ответ, чтобы не повторять webhook

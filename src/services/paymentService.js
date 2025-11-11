@@ -11,17 +11,15 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
 
     const line_items = [];
 
-    console.log(userId);
-    for (const seat of selectedSeats) {
+    // Фильтруем нулевые количества
+    const seatsToCharge = selectedSeats.filter(s => (Number(s.quantity) || 0) > 0);
+
+    for (const seat of seatsToCharge) {
         try {
             const seatData = allSeats.find(s => s.id === seat.seatId);
             if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
             if (!event) throw new Error('Event не найден.');
             if (seat.quantity > seatData.available) throw new Error(`Недостаточно мест для ${seat.seatId}`);
-            for (let i = 0; i < seat.quantity; i++) {
-                await reserveTicket({ seatId: seat.seatId });
-            }
-            console.log(`Зарезервировано ${seat.quantity} мест для ${seat.seatId}`);
             line_items.push({
                 price_data: {
                     currency: "pln",
@@ -39,8 +37,6 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
         }
     }
 
-
-    // После цикла создаём сессию один раз
     const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items,
@@ -48,11 +44,20 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
         success_url: `${process.env.FRONTEND_URL}/profile/success`,
         cancel_url: `${process.env.FRONTEND_URL}/profile/canceled`,
         metadata: {
-            eventId,
-            seats: JSON.stringify(selectedSeats),
+            eventId: eventId,
+            userId: userId,
+            seats: JSON.stringify(seatsToCharge),
         },
     });
 
+    if (session.url) {
+        for (const seat of seatsToCharge) {
+            for (let i = 0; i < seat.quantity; i++) {
+                await reserveTicket({ seatId: seat.seatId });
+            }
+            console.log(`Зарезервировано ${seat.quantity} мест для ${seat.seatId}`);
+        }
+    }
     return session.url;
 }
 
