@@ -30,7 +30,6 @@ app.use(
   })
 );
 
-app.use(express.json());
 app.use(cookieParser()); // 👈 чтобы работать с cookie на сервере
 
 // 🔹 Роуты
