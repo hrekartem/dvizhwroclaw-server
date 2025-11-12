@@ -122,10 +122,14 @@ exports.loginUser = async (req, res) => {
   const role = roleData?.role || "user";
 
   // Устанавливаем cookie
+  const isProd = process.env.NODE_ENV === "production";
   res.cookie("role", role, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: isProd ? "none" : "lax",
+    secure: isProd, // secure=true в production (https)
+    domain: isProd ? ".dvizhwroclaw.eu" : undefined, // выставить ваш фронтенд-домен в prod
     path: "/",
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 дней
   });
 
   res.json({

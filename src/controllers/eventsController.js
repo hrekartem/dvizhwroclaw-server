@@ -1,4 +1,4 @@
-const { getUpcomingEvents,createEvent, getAllEvents, getSeatIcons, getOnlyActiveEvents, getEventById, getAvailableSeats, getEventSeats, deleteEvent, updateEvent, updateEventSeats } = require('../services/eventsService');
+const { getUpcomingEvents,createEvent, getAllEvents, getSeatIcons, getOnlyActiveEvents, getEventById, getEventSeats, deleteEvent, updateEvent, updateEventSeats } = require('../services/eventsService');
 
 async function fetchCreateEvent(req, res) {
   try {
@@ -121,16 +121,6 @@ async function fetchEventById(req, res) {
   }
 }
 
-async function fetchAvailableSeats(req, res) {
-  try {
-    const { id } = req.params;
-    const seats = await getAvailableSeats(id);
-    res.status(200).json(seats);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
-
 async function fetchEventSeats(req, res) {
   try {
     const { id } = req.params;
@@ -140,4 +130,4 @@ async function fetchEventSeats(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
-module.exports = {fetchCreateEvent, fetchSeatIcons, fetchUpcomingEvents, fetchOnlyActiveEvents, fetchAllEvents, fetchEventById, fetchAvailableSeats, fetchEventSeats, fetchDeleteEvent, fetchUpdateEvent, fetchUpdateEventSeats };
+module.exports = {fetchCreateEvent, fetchSeatIcons, fetchUpcomingEvents, fetchOnlyActiveEvents, fetchAllEvents, fetchEventById, fetchEventSeats, fetchDeleteEvent, fetchUpdateEvent, fetchUpdateEventSeats };

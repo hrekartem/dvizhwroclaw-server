@@ -22,7 +22,7 @@ async function fetchCreatePayment(req, res) {
     res.json({ url });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Ошибка при создании платежа" });
+    res.status(500).json({ error: err.message});
   }
 }
 
@@ -67,23 +67,8 @@ async function handleWebhook(req, res) {
             continue;
           }
 
-          // Идемпотентность: считаем уже созданные активные билеты
-          const { data: existingTickets, error: existingErr } = await supabase
-            .from("tickets")
-            .select("id")
-            .eq("event_id", eventId)
-            .eq("user_id", userId)
-            .eq("seat_id", seatId)
-            .eq("status", "active");
-
-          if (existingErr) {
-            console.error("Ошибка проверки существующих билетов:", existingErr.message);
-            continue;
-          }
-
-          const existingCount = Array.isArray(existingTickets) ? existingTickets.length : 0;
-          const remaining = Math.max(0, quantity - existingCount);
-          console.log(`seat=${seatId} quantity=${quantity} existing=${existingCount} remaining=${remaining}`);
+          const remaining = Math.max(0, quantity);
+          console.log(`seat=${seatId} quantity=${quantity} remaining=${remaining}`);
 
           for (let i = 0; i < remaining; i++) {
             await createTicket({

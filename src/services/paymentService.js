@@ -5,7 +5,7 @@ const { reserveTicket } = require('./ticketService');
 const { createReservation } = require("./reservationService");
 const supabase = require("../config/supabase");
 
-const FEE = 1.02;
+const FEE = 1.03;
 
 async function createPayment({ eventId, seats: selectedSeats, userId }) {
     // Фильтруем нулевые количества
@@ -21,7 +21,7 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
       .gt("expires_at", nowISO);
     if (resErr) throw new Error(resErr.message);
     if (Array.isArray(existingRes) && existingRes.length > 0) {
-      throw new Error("У вас уже есть активная бронь. Завершите текущую оплату.");
+      throw new Error("У вас уже есть активная бронь (истекает после 10 минут). Завершите текущую оплату.");
     }
 
     // Проверяем доступность — используем getEventSeats (учитывает reserved)

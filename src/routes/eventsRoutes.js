@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { fetchUpcomingEvents, fetchOnlyActiveEvents, fetchCreateEvent, fetchSeatIcons, fetchAllEvents, fetchUpdateEventSeats, fetchEventById, fetchAvailableSeats, fetchEventSeats, fetchDeleteEvent, fetchUpdateEvent} = require('../controllers/eventsController');
+const { fetchUpcomingEvents, fetchOnlyActiveEvents, fetchCreateEvent, fetchSeatIcons, fetchAllEvents, fetchUpdateEventSeats, fetchEventById, fetchEventSeats, fetchDeleteEvent, fetchUpdateEvent} = require('../controllers/eventsController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -13,7 +13,6 @@ router.get('/all', fetchAllEvents);
 router.get('/seat-icons', fetchSeatIcons);
 router.put('/create', authMiddleware, fetchCreateEvent);
 
-router.get('/:id/available-seats', fetchAvailableSeats);
 router.get('/:id/seats', fetchEventSeats);
 
 router.get('/:id', fetchEventById); // роут по id в конце

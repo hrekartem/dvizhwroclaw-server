@@ -61,9 +61,6 @@ async function getSeatIcons() {
   }
 }
 
-
-
-
 async function updateEvent(id, body, files) {
   try {
     // 1️⃣ Извлекаем данные из body
@@ -262,7 +259,6 @@ async function updateEventSeats({ eventId, seats, backgroundFile }) {
 }
 
 
-
 async function getOnlyActiveEvents() {
   const { data, error } = await supabase
     .from("events")
@@ -306,58 +302,6 @@ async function getEventById(id) {
   return { event, gallery };
 }
 
-async function getAvailableSeats(eventId) {
-  // 1. Берём все места для события
-  const { data: seats, error: seatsError } = await supabase
-    .from("event_seats")
-    .select("id, name, capacity")
-    .eq("event_id", eventId);
-
-  if (seatsError) throw seatsError;
-
-  // 2. Берём все активные билеты для события
-  const { data: tickets, error: ticketsError } = await supabase
-    .from("tickets")
-    .select("seat_id")
-    .eq("event_id", eventId)
-    .eq("status", "active");
-
-  if (ticketsError) throw ticketsError;
-
-  // 3. Резервации по таблице reservations (не истёкшие)
-  const now = new Date().toISOString();
-  const { data: reservedData, error: resError } = await supabase
-    .from("reservations")
-    .select("seat_ids")
-    .eq("event_id", eventId)
-    .gt("expires_at", now);
-
-  if (resError) throw resError;
-
-  const reservedSeatIds = reservedData ? reservedData.flatMap(r => r.seat_ids) : [];
-
-  // 4. Считаем купленные билеты по каждому месту
-  const activeCountMap = {};
-  tickets.forEach(ticket => {
-    const seatId = ticket.seat_id;
-    if (!seatId) return;
-    activeCountMap[seatId] = (activeCountMap[seatId] || 0) + 1;
-  });
-
-  // 5. Вычисляем доступность
-  const availableSeats = seats.map(seat => {
-    const capacity = Number(seat.capacity) || 0;
-    const activeCount = activeCountMap[seat.id] || 0;
-    const reservedCount = reservedSeatIds.filter(id => id === seat.id).length;
-    const available = Math.max(capacity - activeCount - reservedCount, 0);
-    return { ...seat, available };
-  });
-  return availableSeats;
-}
-
-module.exports = { getAvailableSeats };
-
-
 async function getEventSeats(eventId) {
   if (!eventId) throw new Error("Missing event ID");
 
@@ -385,11 +329,10 @@ async function getEventSeats(eventId) {
       .eq("status", "active")
       .not("seat_id", "is", null);
     if (ticketsError) throw ticketsError;
-
     const soldSeatIds = soldTickets ? soldTickets.map(t => t.seat_id) : [];
 
-    // Получаем зарезервированные места
     const now = new Date().toISOString();
+    // Получаем зарезервированные места
     const { data: reservedData, error: resError } = await supabase
       .from("reservations")
       .select("seat_ids")
@@ -430,4 +373,4 @@ async function deleteEvent(eventId) {
 
 
 
-module.exports = {createEvent, getSeatIcons, getUpcomingEvents, getAllEvents, updateEventSeats, getOnlyActiveEvents, getEventById, getAvailableSeats, getEventSeats, deleteEvent, updateEvent };
+module.exports = { createEvent, getSeatIcons, getUpcomingEvents, getAllEvents, updateEventSeats, getOnlyActiveEvents, getEventById, getEventSeats, deleteEvent, updateEvent };
