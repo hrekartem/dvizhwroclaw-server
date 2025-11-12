@@ -349,15 +349,9 @@ async function getAvailableSeats(eventId) {
     const capacity = Number(seat.capacity) || 0;
     const activeCount = activeCountMap[seat.id] || 0;
     const reservedCount = reservedSeatIds.filter(id => id === seat.id).length;
-
     const available = Math.max(capacity - activeCount - reservedCount, 0);
-
-    return {
-      ...seat,
-      available,
-    };
+    return { ...seat, available };
   });
-
   return availableSeats;
 }
 
