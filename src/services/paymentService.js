@@ -3,43 +3,60 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { getEventSeats, getEventById } = require('./eventsService');
 const { reserveTicket } = require('./ticketService');
 const { createReservation } = require("./reservationService");
+const supabase = require("../config/supabase");
 
 const FEE = 1.02;
 
 async function createPayment({ eventId, seats: selectedSeats, userId }) {
-    const { seats: allSeats } = await getEventSeats(eventId);
-    const { event: event } = await getEventById(eventId);
-
-    const line_items = [];
-
     // Фильтруем нулевые количества
     const seatsToCharge = selectedSeats.filter(s => (Number(s.quantity) || 0) > 0);
 
+    // Предотвращаем дублирующие сессии: проверяем активную бронь пользователя
+    const nowISO = new Date().toISOString();
+    const { data: existingRes, error: resErr } = await supabase
+      .from("reservations")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("user_id", userId)
+      .gt("expires_at", nowISO);
+    if (resErr) throw new Error(resErr.message);
+    if (Array.isArray(existingRes) && existingRes.length > 0) {
+      throw new Error("У вас уже есть активная бронь. Завершите текущую оплату.");
+    }
+
+    // Проверяем текущую доступность перед резервацией
+    const { seats: allSeats } = await getEventSeats(eventId);
+    const { event: event } = await getEventById(eventId);
+
     for (const seat of seatsToCharge) {
-        try {
-            const seatData = allSeats.find(s => s.id === seat.seatId);
-            if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
-            if (!event) throw new Error('Event не найден.');
-            if (seat.quantity > seatData.available) throw new Error(`Недостаточно мест для ${seat.seatId}`);
-            line_items.push({
-                price_data: {
-                    currency: "pln",
-                    product_data: {
-                        name: `Ивент: ${event.name}`,
-                        images: [event.main_image_url],
-                        description: `Место: ${seatData.name}, UserID: ${userId}`,
-                    },
-                    unit_amount: Math.round(Number(seatData.price_pln) * 100 * FEE),
-                },
-                quantity: seat.quantity,
-            });
-        } catch (err) {
-            console.error("Ошибка при формировании платежа:", seat.seatId, err.message);
+        const seatData = allSeats.find(s => s.id === seat.seatId);
+        if (!seatData) throw new Error(`Место ${seat.seatId} не найдено`);
+        if (!event) throw new Error('Event не найден.');
+        if (Number(seat.quantity) > Number(seatData.available ?? 0)) {
+            throw new Error(`Недостаточно мест для ${seat.seatId}`);
         }
     }
 
-    // Создаём бронь на время оплаты (например, 10 минут)
+    // Создаём бронь сразу (на 10 минут)
     await createReservation({ eventId, userId, seats: seatsToCharge, ttlMinutes: 10 });
+
+    // Формируем line_items на основе проверенных данных
+    const line_items = [];
+    for (const seat of seatsToCharge) {
+        const seatData = allSeats.find(s => s.id === seat.seatId);
+        line_items.push({
+            price_data: {
+                currency: "pln",
+                product_data: {
+                    name: `Ивент: ${event.name}`,
+                    images: [event.main_image_url],
+                    description: `Место: ${seatData.name}, UserID: ${userId}`,
+                },
+                unit_amount: Math.round(Number(seatData.price_pln) * 100 * FEE),
+            },
+            quantity: seat.quantity,
+        });
+    }
 
     const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
