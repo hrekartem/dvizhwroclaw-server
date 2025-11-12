@@ -2,6 +2,7 @@ const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { getEventSeats, getEventById } = require('./eventsService');
 const { reserveTicket } = require('./ticketService');
+const { createReservation } = require("./reservationService");
 
 const FEE = 1.02;
 
@@ -33,9 +34,12 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
                 quantity: seat.quantity,
             });
         } catch (err) {
-            console.error("Ошибка при резервировании:", seat.seatId, err.message);
+            console.error("Ошибка при формировании платежа:", seat.seatId, err.message);
         }
     }
+
+    // Создаём бронь на время оплаты (например, 10 минут)
+    await createReservation({ eventId, userId, seats: seatsToCharge, ttlMinutes: 10 });
 
     const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -49,26 +53,6 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
             seats: JSON.stringify(seatsToCharge),
         },
     });
-
-    const EXPIRE_AFTER_MINUTES = 1;
-
-    if (session.url) {
-        for (const seat of seatsToCharge) {
-            for (let i = 0; i < seat.quantity; i++) {
-                await reserveTicket({ seatId: seat.seatId });
-            }
-            console.log(`Зарезервировано ${seat.quantity} мест для ${seat.seatId}`);
-        }
-    }
-
-    setTimeout(async () => {
-        try {
-            await stripe.checkout.sessions.expire(session.id);
-            console.log(`Сессия ${session.id} истекла через ${EXPIRE_AFTER_MINUTES} минут`);
-        } catch (err) {
-            console.error(`Ошибка при истечении сессии ${session.id}:`, err.message);
-        }
-    }, EXPIRE_AFTER_MINUTES * 60 * 1000);
 
     return session.url;
 }

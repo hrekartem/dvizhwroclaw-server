@@ -1,9 +1,10 @@
 const { createPayment } = require("../services/paymentService");
-const { createTicket, returnTicketToPool } = require("../services/ticketService");
+const { createTicket } = require("../services/ticketService");
 const { getEventById, getEventSeats } = require("../services/eventsService")
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = require("../config/supabase");
+const { consumeReservations, releaseReservations } = require("../services/reservationService");
 
 async function fetchCreatePayment(req, res) {
   try {
@@ -52,10 +53,9 @@ async function handleWebhook(req, res) {
         const { event } = await getEventById(eventId);
         if (!event) throw new Error("Ивент не найден");
 
-        // Получаем все места один раз
+        // Получаем все seats один раз
         const { seats: allSeats } = await getEventSeats(eventId);
 
-        // Идемпотентность и создание билетов
         for (const seat of parsedSeats) {
           const seatId = seat.seatId;
           const quantity = Number(seat.quantity) || 0;
@@ -67,7 +67,7 @@ async function handleWebhook(req, res) {
             continue;
           }
 
-          // Считаем уже созданные активные билеты для пары (userId,eventId,seatId)
+          // Идемпотентность: считаем уже созданные активные билеты
           const { data: existingTickets, error: existingErr } = await supabase
             .from("tickets")
             .select("id")
@@ -94,6 +94,9 @@ async function handleWebhook(req, res) {
           }
         }
 
+        // Снимаем бронь после успешной оплаты
+        await consumeReservations({ eventId, userId });
+
         console.log("✅ Билеты успешно созданы после оплаты");
       } catch (e) {
         console.error("Ошибка при создании билетов после оплаты:", e.message);
@@ -106,16 +109,15 @@ async function handleWebhook(req, res) {
     case "checkout.session.async_payment_failed":
     case "payment_intent.payment_failed": {
       const session = event.data.object;
-      const { eventId, seats } = session.metadata || {};
+      const { eventId, userId } = session.metadata || {};
 
       try {
-        const parsedSeats = seats ? JSON.parse(seats) : [];
-        for (const seat of parsedSeats) {
-          await returnTicketToPool({ seatId: seat.seatId });
+        if (eventId && userId) {
+          await releaseReservations({ eventId, userId });
         }
-        console.log("♻️ Места возвращены в пул после неудачной оплаты");
+        console.log("♻️ Бронь снята после неудачной оплаты или истечения сессии");
       } catch (e) {
-        console.error("Ошибка при возврате мест:", e.message);
+        console.error("Ошибка при снятии брони:", e.message);
       }
       break;
     }

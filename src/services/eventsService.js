@@ -228,7 +228,6 @@ async function updateEventSeats({ eventId, seats, backgroundFile }) {
     // Очистка старых мест
     await supabase.from("event_seats").delete().eq("event_id", eventId);
 
-    // Подготовка к вставке с временным tempId
     const seatsToInsert = seats.map((seat) => ({
       event_id: eventId,
       name: seat.name,
@@ -239,7 +238,6 @@ async function updateEventSeats({ eventId, seats, backgroundFile }) {
       position_x: seat.position_x,
       position_y: seat.position_y,
       icon_url: seat.icon_url,
-      tempId: seat.id, // временный идентификатор для связи с иконками
     }));
 
     const { data, error: insertError } = await supabase
@@ -249,15 +247,9 @@ async function updateEventSeats({ eventId, seats, backgroundFile }) {
 
     if (insertError) throw new Error(insertError.message);
 
-    // Добавляем tempId обратно в память, чтобы связать с иконками
-    insertedSeats = data.map((row, i) => ({
-      ...row,
-      tempId: seatsToInsert[i].tempId,
-    }));
-
+    insertedSeats = data;
     result.seats = insertedSeats;
 
-    // === Обновление ticket_count в таблице events ===
     const totalTickets = seats.reduce((sum, seat) => sum + (seat.capacity || 0), 0);
 
     await supabase
@@ -318,16 +310,47 @@ async function getAvailableSeats(eventId) {
   // 1. Берём все места для события
   const { data: seats, error: seatsError } = await supabase
     .from("event_seats")
-    .select("id, name, capacity, reserved")
+    .select("id, name, capacity")
     .eq("event_id", eventId);
 
   if (seatsError) throw seatsError;
 
-  const availableSeats = seats.map(seat => {
-    const reserved = seat.reserved || 0;
-    const capacity = seat.capacity || 0;
+  // 2. Берём все активные билеты для события
+  const { data: tickets, error: ticketsError } = await supabase
+    .from("tickets")
+    .select("seat_id")
+    .eq("event_id", eventId)
+    .eq("status", "active");
 
-    const available = Math.max(capacity - reserved, 0);
+  if (ticketsError) throw ticketsError;
+
+  // 3. Резервации по таблице reservations (не истёкшие)
+  const now = new Date().toISOString();
+  const { data: reservedData, error: resError } = await supabase
+    .from("reservations")
+    .select("seat_ids")
+    .eq("event_id", eventId)
+    .gt("expires_at", now);
+
+  if (resError) throw resError;
+
+  const reservedSeatIds = reservedData ? reservedData.flatMap(r => r.seat_ids) : [];
+
+  // 4. Считаем купленные билеты по каждому месту
+  const activeCountMap = {};
+  tickets.forEach(ticket => {
+    const seatId = ticket.seat_id;
+    if (!seatId) return;
+    activeCountMap[seatId] = (activeCountMap[seatId] || 0) + 1;
+  });
+
+  // 5. Вычисляем доступность
+  const availableSeats = seats.map(seat => {
+    const capacity = Number(seat.capacity) || 0;
+    const activeCount = activeCountMap[seat.id] || 0;
+    const reservedCount = reservedSeatIds.filter(id => id === seat.id).length;
+
+    const available = Math.max(capacity - activeCount - reservedCount, 0);
 
     return {
       ...seat,
@@ -384,10 +407,11 @@ async function getEventSeats(eventId) {
 
     // Вычисляем доступные места для каждого seat
     const seatsWithAvailability = seatsData.map(seat => {
+      const capacity = Number(seat.capacity) || 0;
       const soldCount = soldSeatIds.filter(id => id === seat.id).length;
       const reservedCount = reservedSeatIds.filter(id => id === seat.id).length;
-      const available = Math.max(0, seat.capacity - soldCount - reservedCount);
-      return Object.assign({}, seat, { available });
+      const available = Math.max(0, capacity - soldCount - reservedCount);
+      return Object.assign({}, seat, { available, reserved: reservedCount, capacity });
     });
 
     return {

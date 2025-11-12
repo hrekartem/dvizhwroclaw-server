@@ -30,26 +30,24 @@ async function reserveTicket({ seatId }) {
 }
 
 async function createTicket({ event, user, seat = null }) {
-    // Валидируем входные данные
-    if (!event?.id || !user?.id || !seat?.id) {
-        throw new Error("Некорректные данные для билета (event/user/seat)");
-    }
+    try {
+        if (!event?.id || !user?.id || !seat?.id) {
+            throw new Error("Некорректные данные для билета (event/user/seat)");
+        }
 
-    // UUID для QR (предпочитаем crypto.randomUUID, иначе nanoid)
-    const uuid =
-        (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function")
-            ? globalThis.crypto.randomUUID()
-            : nanoid();
+        const uuid =
+            (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function")
+                ? globalThis.crypto.randomUUID()
+                : nanoid();
 
-    const qr = `event:${event.id}|user:${user.id}|uuid=${uuid}`;
+        const qr = `event:${event.id}|user:${user.id}|uuid=${uuid}`;
 
-    // Цена: используем цену из места; гарантируем число, избегаем null
-    const pricePln = seat.price_pln != null ? Number(seat.price_pln) : 0;
-    const priceEur = seat.price_eur != null ? Number(seat.price_eur) : 0;
+        const pricePln = seat.price_pln != null ? Number(seat.price_pln) : 0;
+        const priceEur = seat.price_eur != null ? Number(seat.price_eur) : 0;
 
-    const { data, error } = await supabase
-        .from("tickets")
-        .insert({
+        const { data, error } = await supabase
+          .from("tickets")
+          .insert({
             event_id: event.id,
             user_id: user.id,
             seat_id: seat.id,
@@ -58,14 +56,18 @@ async function createTicket({ event, user, seat = null }) {
             qr_code: qr,
             status: "active",
             purchased_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
+          })
+          .select("id")
+          .single();
 
-    if (error) throw error;
+        if (error) throw error;
 
-    console.log(`🎫 Билет создан для пользователя ${user.id}`, { ticketId: data?.id, qr });
-    return data;
+        console.log(`🎫 Билет создан для пользователя ${user.id}`, { ticketId: data?.id, qr });
+        return data;
+    } catch (err) {
+        console.error("Ошибка при создании билета:", err.message);
+        throw new Error("Не удалось создать билет");
+    }
 }
 /**
  * Возврат места в пул (если оплата не прошла)
