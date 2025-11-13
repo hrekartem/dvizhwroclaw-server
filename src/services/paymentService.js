@@ -1,7 +1,6 @@
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { getEventSeats, getEventById } = require('./eventsService');
-const { reserveTicket } = require('./ticketService');
 const { createReservation } = require("./reservationService");
 const supabase = require("../config/supabase");
 
@@ -23,7 +22,7 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
     if (Array.isArray(existingRes) && existingRes.length > 0) {
       throw new Error("У вас уже есть активная бронь (истекает после 10 минут). Завершите текущую оплату.");
     }
-
+    
     // Проверяем доступность — используем getEventSeats (учитывает reserved)
     const { seats: allSeats } = await getEventSeats(eventId);
     const { event } = await getEventById(eventId);
@@ -37,8 +36,8 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
       }
     }
 
-    // Создаём бронь сразу (на 10 минут)
-    await createReservation({ eventId, userId, seats: seatsToCharge, ttlMinutes: 10 });
+    // Создаём бронь сразу (на 30 минут)
+    await createReservation({ eventId, userId, seats: seatsToCharge, ttlMinutes: 30 });
 
     // Формируем line_items
     const line_items = [];
@@ -65,6 +64,7 @@ async function createPayment({ eventId, seats: selectedSeats, userId }) {
       success_url: `${process.env.FRONTEND_URL}/profile/success`,
       cancel_url: `${process.env.FRONTEND_URL}/profile/canceled`,
       metadata: { eventId, userId, seats: JSON.stringify(seatsToCharge) },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });
 
     return session.url;

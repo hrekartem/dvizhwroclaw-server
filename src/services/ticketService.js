@@ -1,34 +1,6 @@
 const supabase = require("../config/supabase");
 const { nanoid } = require("nanoid");
 
-/**
- * Резервирует место: увеличивает reserved на 1
- */
-async function reserveTicket({ seatId }) {
-  // Получаем текущее состояние места
-  const { data: seatData, error: seatError } = await supabase
-    .from("event_seats")
-    .select("id, name, capacity, reserved")
-    .eq("id", seatId)
-    .single();
-
-  if (seatError || !seatData) throw new Error(`Место не найдено (${seatId})`);
-
-  const available = seatData.capacity - (seatData.reserved || 0);
-  if (available <= 0) throw new Error(`Место ${seatData.name} недоступно`);
-
-  // Увеличиваем reserved
-  const { error: updateError } = await supabase
-    .from("event_seats")
-    .update({ reserved: (seatData.reserved || 0) + 1 })
-    .eq("id", seatId);
-
-  if (updateError) throw new Error("Ошибка при резервировании места");
-
-  console.log(`✅ Место ${seatId} зарезервировано`);
-  return true;
-}
-
 async function createTicket({ event, user, seat = null }) {
     try {
         if (!event?.id || !user?.id || !seat?.id) {
@@ -69,34 +41,5 @@ async function createTicket({ event, user, seat = null }) {
         throw new Error("Не удалось создать билет");
     }
 }
-/**
- * Возврат места в пул (если оплата не прошла)
- */
-async function returnTicketToPool({ seatId }) {
-  try {
-    const { data: seatData, error: seatError } = await supabase
-      .from("event_seats")
-      .select("id, reserved")
-      .eq("id", seatId)
-      .single();
 
-    if (seatError || !seatData) throw new Error(`Место ${seatId} не найдено`);
-
-    const newReserved = Math.max((seatData.reserved || 1) - 1, 0);
-
-    const { error: updateError } = await supabase
-      .from("event_seats")
-      .update({ reserved: newReserved })
-      .eq("id", seatId);
-
-    if (updateError) throw new Error("Ошибка при возврате места в пул");
-
-    console.log(`♻️ Место ${seatId} возвращено из резерва`);
-    return true;
-  } catch (err) {
-    console.error("Ошибка returnTicketToPool:", err.message);
-    return false;
-  }
-}
-
-module.exports = { reserveTicket, createTicket, returnTicketToPool };
+module.exports = { createTicket };
