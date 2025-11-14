@@ -12,7 +12,10 @@ async function createTicket({ event, user, seat = null }) {
                 ? globalThis.crypto.randomUUID()
                 : nanoid();
 
-        const qr = `event:${event.id}|user:${user.id}|uuid=${uuid}`;
+        const shortUuid = uuid.slice(0, 8);
+        const shortUserId = user.id.slice(0, 8);
+        const shortEventId = event.id.slice(0, 8);
+        const qr = `e:${shortEventId}|u:${shortUserId}|t=${shortUuid}`;
 
         const pricePln = seat.price_pln != null ? Number(seat.price_pln) : 0;
         const priceEur = seat.price_eur != null ? Number(seat.price_eur) : 0;

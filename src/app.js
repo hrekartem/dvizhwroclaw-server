@@ -14,7 +14,7 @@ app.use("/api/payment", paymentRoutes);
 // Middleware
 
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(

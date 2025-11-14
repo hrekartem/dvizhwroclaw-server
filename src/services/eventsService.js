@@ -1,5 +1,68 @@
 const supabase = require("../config/supabase"); // клиент напрямую
 
+async function getAvailableSeats(id) {
+  try {
+    // 1. Получаем список мест
+    const { data: seatsData, error: seatsError } = await supabase
+      .from("event_seats")
+      .select("*")
+      .eq("event_id", id);
+    if (seatsError) throw seatsError;
+
+    // 2. Получаем проданные билеты
+    const { data: soldTickets, error: ticketsError } = await supabase
+      .from("tickets")
+      .select("seat_id")
+      .eq("event_id", id)
+      .eq("status", "active")
+      .not("seat_id", "is", null);
+    if (ticketsError) throw ticketsError;
+
+    const soldSeatIds = soldTickets ? soldTickets.map(t => t.seat_id) : [];
+
+    // 3. Получаем зарезервированные места
+    const now = new Date().toISOString();
+    const { data: reservedData, error: resError } = await supabase
+      .from("reservations")
+      .select("seat_ids")
+      .eq("event_id", id)
+      .gt("expires_at", now);
+    if (resError) throw resError;
+
+    const reservedSeatIds = reservedData ? reservedData.flatMap(r => r.seat_ids) : [];
+
+    // 4. Вычисляем доступные места
+    const seatsWithAvailability = seatsData.map(seat => {
+      const capacity = Number(seat.capacity) || 0;
+      const soldCount = soldSeatIds.filter(seatId => seatId === seat.id).length;
+      const reservedCount = reservedSeatIds.filter(seatId => seatId === seat.id).length;
+      const available = Math.max(0, capacity - soldCount - reservedCount);
+      return {
+        ...seat,
+        available,
+        reserved: reservedCount,
+        capacity,
+      };
+    });
+
+    // 5. Суммируем общее количество доступных мест
+    const totalAvailable = seatsWithAvailability.reduce((acc, seat) => acc + seat.available, 0);
+
+    // 6. Суммируем общее количество мест (capacity)
+    const totalCapacity = seatsWithAvailability.reduce((acc, seat) => acc + seat.capacity, 0);
+
+    return {
+      totalAvailable,
+      totalCapacity,
+      seats: seatsWithAvailability,
+    };
+  } catch (error) {
+    console.error("Error fetching available seats:", error);
+    throw error;
+  }
+}
+
+
 async function createEvent() {
   const { data, error } = await supabase
     .from("events")
@@ -373,4 +436,4 @@ async function deleteEvent(eventId) {
 
 
 
-module.exports = { createEvent, getSeatIcons, getUpcomingEvents, getAllEvents, updateEventSeats, getOnlyActiveEvents, getEventById, getEventSeats, deleteEvent, updateEvent };
+module.exports = { getAvailableSeats, createEvent, getSeatIcons, getUpcomingEvents, getAllEvents, updateEventSeats, getOnlyActiveEvents, getEventById, getEventSeats, deleteEvent, updateEvent };
